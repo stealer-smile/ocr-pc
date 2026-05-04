@@ -1,0 +1,33 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+
+# PyInstaller
+build/
+dist/
+*.spec.bak
+
+# HuggingFace model cache
+.cache/
+models/
+
+# App config (user data)
+# %APPDATA%\LightOnOCR\ — not in repo
+
+# IDE
+.idea/
+.vscode/
+*.suo
+*.user
+
+# OS
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# Assets (nếu icon chưa có sẵn)
+assets/*.ico

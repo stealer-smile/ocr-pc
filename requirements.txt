@@ -1,0 +1,11 @@
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+torch+cpu
+torchvision+cpu
+onnxruntime>=1.18.0
+numpy>=1.26.0
+transformers>=5.0.0
+pillow>=10.0.0
+pypdfium2>=4.0.0
+tkinterdnd2>=0.3.0
+huggingface_hub>=0.25.0
