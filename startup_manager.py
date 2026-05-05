@@ -4,8 +4,10 @@ Strategy: Task Scheduler (primary) → Registry fallback
 - Task Scheduler: chạy sau login 10s, không bị Group Policy block
 - Registry HKCU\\Run: fallback nếu schtasks không available
 """
+import os
 import subprocess
 import sys
+import tempfile
 import winreg
 from pathlib import Path
 
@@ -70,7 +72,6 @@ def _enable_task() -> bool:
 </Task>"""
 
   # Write XML to temp file (schtasks /Create /XML requires a file path)
-  import tempfile, os
   tmp = tempfile.NamedTemporaryFile(suffix=".xml", delete=False, mode="w", encoding="utf-16")
   tmp.write(xml)
   tmp.close()

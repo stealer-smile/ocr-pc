@@ -10,7 +10,7 @@ from pathlib import Path
 
 import markdown
 from docx import Document
-from docx.shared import Pt, Inches, RGBColor, Emu
+from docx.shared import Pt, Inches, RGBColor, Emu, Cm
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
@@ -248,7 +248,6 @@ def md_to_docx(md_text: str, output_path: str) -> None:
   doc = Document()
 
   # ── Page setup: A4, margins chuẩn (top 2, bottom 2, left 3, right 2 cm) ──
-  from docx.shared import Cm
   for section in doc.sections:
     section.page_width = Cm(21)
     section.page_height = Cm(29.7)

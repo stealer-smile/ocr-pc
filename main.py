@@ -7,7 +7,7 @@ import sys
 import threading
 import time
 import tkinter as tk
-from datetime import datetime
+
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
@@ -29,8 +29,15 @@ for _n in ("main", "ocr_engine", "pdf_processor"):
   logging.getLogger(_n).setLevel(logging.INFO)
 log = logging.getLogger("main")
 
-from config import APP_NAME, APP_VERSION, MODEL_ID, load_config, save_config
+# ── Project imports (after sys.path setup) ──
+from config import APP_NAME, APP_VERSION, MODEL_ID, SPEED_PRESETS, load_config, save_config
 import startup_manager
+import ocr_engine
+from pdf_processor import pdf_to_images, get_page_count
+from docx_exporter import md_to_docx
+
+from tkinterdnd2 import TkinterDnD
+
 log.info("App starting: %s v%s", APP_NAME, APP_VERSION)
 
 # ── Màu sắc (Theme dịu mắt) ──────────────────────────────────
@@ -49,7 +56,7 @@ WARNING = "#D7BA7D"        # Cảnh báo
 ERROR_COLOR = "#F48771"    # Lỗi (đỏ nhạt, không chói)
 
 
-class App(tk.Tk):
+class App(TkinterDnD.Tk):
   def __init__(self) -> None:
     super().__init__()
     self.cfg = load_config()
@@ -79,6 +86,7 @@ class App(tk.Tk):
   def _build_ui(self) -> None:
     self._build_main()
     self._build_statusbar()
+
   def _build_main(self) -> None:
     main = tk.Frame(self, bg=BG_DARK)
     main.pack(fill=tk.BOTH, expand=True, padx=16, pady=(12, 0))
@@ -137,13 +145,9 @@ class App(tk.Tk):
     self._bind_drag_drop()
 
   def _bind_drag_drop(self) -> None:
-    """Try tkinterdnd2 drag & drop, fallback nếu không có."""
-    try:
-      import tkinterdnd2  # noqa: F401
-      self.drop_frame.drop_target_register("DND_Files")  # type: ignore
-      self.drop_frame.dnd_bind("<<Drop>>", self._on_drop)  # type: ignore
-    except Exception:
-      pass
+    """Register tkinterdnd2 drag & drop."""
+    self.drop_frame.drop_target_register("DND_Files")  # type: ignore
+    self.drop_frame.dnd_bind("<<Drop>>", self._on_drop)  # type: ignore
 
   def _build_page_range(self, parent: tk.Frame) -> None:
     card = self._card(parent, "Phạm vi trang")
@@ -176,7 +180,6 @@ class App(tk.Tk):
     self.total_pages_label.pack(padx=16, pady=(0, 12), anchor=tk.W)
 
   def _build_speed_preset(self, parent: tk.Frame) -> None:
-    from config import SPEED_PRESETS
     card = self._card(parent, "Tốc độ")
     card.pack(fill=tk.X, pady=(0, 12))
 
@@ -315,8 +318,7 @@ class App(tk.Tk):
 
   def _show_device_badge(self, parent: tk.Widget) -> None:
     try:
-      from ocr_engine import get_device_info
-      info = get_device_info()
+      info = ocr_engine.get_device_info()
       dev = info["device"]
       if dev == "cuda":
         vram = info.get("vram_gb", "?")
@@ -392,8 +394,7 @@ class App(tk.Tk):
     name = Path(path).name
 
     try:
-      from pdf_processor import get_page_count
-      total = get_page_count(path)
+      total = get_page_count(self.pdf_path)
       self.file_label.configure(text=name, fg=ACCENT2)
       self.total_pages_label.configure(text=f"📄 {total} trang")
       self.page_to.set(str(total))
@@ -420,8 +421,6 @@ class App(tk.Tk):
 
   def _run_ocr_worker(self) -> None:
     try:
-      from pdf_processor import pdf_to_images, get_page_count
-      import ocr_engine
 
       total = get_page_count(self.pdf_path)
 
@@ -445,6 +444,7 @@ class App(tk.Tk):
       )
 
       done = 0
+      n_pages = p_to - p_from
       for idx, img in page_gen:
         if getattr(self, "_stop_flag", False):
           break
@@ -452,6 +452,8 @@ class App(tk.Tk):
           continue
 
         is_first = (done == 0)
+        self._update_progress(done, n_pages, f"Đang OCR trang {idx + 1}/{total}…")
+
         text = ocr_engine.ocr_page(
           img, model_id, self.cfg["max_new_tokens"],
           status_callback=_status if is_first else None,
@@ -463,7 +465,7 @@ class App(tk.Tk):
         self.ocr_results[idx] = text
         done += 1
         self.after(0, self._append_page_result, idx, text)
-        self._update_progress(done, p_to - p_from, f"OCR trang {idx + 1}/{total}…")
+        self._update_progress(done, n_pages, f"Xong trang {idx + 1}/{total}")
 
       self.after(0, self._on_ocr_done)
     except Exception as e:
@@ -568,7 +570,6 @@ class App(tk.Tk):
       initialfile=default_name,
     )
     if path:
-      from docx_exporter import md_to_docx
       try:
         md_to_docx(text, path)
         self._set_status(f"Đã lưu: {path}")
@@ -584,7 +585,6 @@ class App(tk.Tk):
     self.clipboard_clear()
     self.clipboard_append(text)
     self._set_status("Đã copy vào clipboard!")
-
 
   # ── Startup toggle ─────────────────────────────────────────
   def _toggle_startup(self) -> None:

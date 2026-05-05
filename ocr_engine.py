@@ -4,9 +4,13 @@ ocr_engine.py — LightOnOCR ONNX Runtime engine (int4 quantized)
 import logging
 import os
 import time
+
 import numpy as np
+import onnxruntime as ort
 from PIL import Image
 from typing import Callable
+from transformers import AutoConfig, AutoProcessor, GenerationConfig
+from huggingface_hub import try_to_load_from_cache, snapshot_download
 
 log = logging.getLogger("ocr_engine")
 
@@ -22,7 +26,6 @@ _is_loaded: bool = False
 
 def get_best_device() -> str:
   try:
-    import onnxruntime as ort
     if "CUDAExecutionProvider" in ort.get_available_providers():
       return "cuda"
   except Exception:
@@ -37,7 +40,6 @@ def get_device_info() -> dict:
 
 def is_model_cached(model_id: str) -> bool:
   try:
-    from huggingface_hub import try_to_load_from_cache
     r = try_to_load_from_cache(model_id, "onnx/vision_encoder_q4.onnx")
     return r is not None and r != ""
   except Exception:
@@ -53,10 +55,6 @@ def _load_model(
 
   if _is_loaded and _model_id == model_id:
     return
-
-  import onnxruntime as ort
-  from transformers import AutoConfig, AutoProcessor, GenerationConfig
-  from huggingface_hub import snapshot_download
 
   cached = is_model_cached(model_id)
   if not cached and status_callback:
@@ -83,7 +81,11 @@ def _load_model(
     status_callback("⚙ Đang nạp ONNX sessions…")
 
   device = get_best_device()
-  providers = ["CUDAExecutionProvider", "CPUExecutionProvider"] if device == "cuda" else ["CPUExecutionProvider"]
+  providers = (
+    ["CUDAExecutionProvider", "CPUExecutionProvider"]
+    if device == "cuda"
+    else ["CPUExecutionProvider"]
+  )
 
   sess_opts = ort.SessionOptions()
   sess_opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
@@ -92,9 +94,15 @@ def _load_model(
   sess_opts.inter_op_num_threads = max(1, n_threads // 2)
 
   t1 = time.time()
-  _vision_session = ort.InferenceSession(f"{folder_path}/{vision_model}", sess_opts, providers=providers)
-  _embed_session = ort.InferenceSession(f"{folder_path}/{embed_model}", sess_opts, providers=providers)
-  _decoder_session = ort.InferenceSession(f"{folder_path}/{decoder_model}", sess_opts, providers=providers)
+  _vision_session = ort.InferenceSession(
+    f"{folder_path}/{vision_model}", sess_opts, providers=providers
+  )
+  _embed_session = ort.InferenceSession(
+    f"{folder_path}/{embed_model}", sess_opts, providers=providers
+  )
+  _decoder_session = ort.InferenceSession(
+    f"{folder_path}/{decoder_model}", sess_opts, providers=providers
+  )
   log.info("Sessions loaded in %.1fs | %s", time.time() - t1, providers[0])
 
   _model_id = model_id
@@ -146,8 +154,12 @@ def ocr_page(
     inputs_embeds = _embed_session.run(None, {"input_ids": input_ids})[0]
 
     if has_vision and image_features is None:
-      image_features = _vision_session.run(None, {"pixel_values": pixel_values})[0]
-      inputs_embeds[input_ids == image_token_id] = image_features.reshape(-1, image_features.shape[-1])
+      image_features = _vision_session.run(
+        None, {"pixel_values": pixel_values}
+      )[0]
+      inputs_embeds[input_ids == image_token_id] = (
+        image_features.reshape(-1, image_features.shape[-1])
+      )
 
     logits, *present = _decoder_session.run(None, {
       "inputs_embeds": inputs_embeds,
@@ -157,19 +169,27 @@ def ocr_page(
 
     input_ids = logits[:, -1].argmax(-1, keepdims=True)
     attention_mask = np.concatenate(
-      [attention_mask, np.ones((batch_size, 1), dtype=attention_mask.dtype)], axis=-1
+      [attention_mask, np.ones((batch_size, 1), dtype=attention_mask.dtype)],
+      axis=-1,
     )
     for j, key in enumerate(past_cache):
       past_cache[key] = present[j]
-    generated_tokens = np.concatenate([generated_tokens, input_ids], axis=-1)
+    generated_tokens = np.concatenate(
+      [generated_tokens, input_ids], axis=-1
+    )
 
     if np.isin(input_ids, eos_token_id).any():
       break
 
-  result = _processor.batch_decode(generated_tokens, skip_special_tokens=True)[0]
+  result = _processor.batch_decode(
+    generated_tokens, skip_special_tokens=True
+  )[0]
   n_tok = generated_tokens.shape[1]
   elapsed = time.time() - t0
-  log.info("OCR done: %d tokens in %.1fs (%.2fs/tok) | %d chars", n_tok, elapsed, elapsed / max(1, n_tok), len(result))
+  log.info(
+    "OCR done: %d tokens in %.1fs (%.2fs/tok) | %d chars",
+    n_tok, elapsed, elapsed / max(1, n_tok), len(result),
+  )
   return result
 
 

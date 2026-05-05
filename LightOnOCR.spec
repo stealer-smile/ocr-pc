@@ -11,18 +11,26 @@ block_cipher = None
 # Collect ONNX Runtime data
 datas_ort, binaries_ort, hiddenimports_ort = collect_all("onnxruntime")
 
+# Collect transformers (AutoConfig, AutoProcessor, GenerationConfig + torch dependency chain)
+datas_tf, binaries_tf, hiddenimports_tf = collect_all("transformers")
+
+# Collect tokenizers
+datas_tok, binaries_tok, hiddenimports_tok = collect_all("tokenizers")
+
 a = Analysis(
     ["main.py"],
     pathex=["."],
-    binaries=binaries_ort,
+    binaries=[*binaries_ort, *binaries_tf, *binaries_tok],
     datas=[
         *([("assets", "assets")] if os.path.isdir("assets") else []),
         *datas_ort,
+        *datas_tf,
+        *datas_tok,
         *collect_data_files("pypdfium2"),
         *collect_data_files("tkinterdnd2"),
-        *collect_data_files("tokenizers"),
         *collect_data_files("tkhtmlview"),
         *collect_data_files("docx"),
+        *collect_data_files("huggingface_hub"),
     ],
     hiddenimports=[
         "ocr_engine",
@@ -38,18 +46,17 @@ a = Analysis(
         "pypdfium2",
         "PIL",
         "PIL._tkinter_finder",
-        "transformers",
         "numpy",
         "onnxruntime",
         "huggingface_hub",
         *hiddenimports_ort,
+        *hiddenimports_tf,
+        *hiddenimports_tok,
     ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
     excludes=[
-        "torch",
-        "torch.distributed",
         "triton",
         "matplotlib",
         "numpy.testing",
