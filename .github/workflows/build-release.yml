@@ -79,6 +79,19 @@ jobs:
         with:
           tag_name: ${{ steps.version.outputs.TAG }}
           name: LightOnOCR ${{ steps.version.outputs.TAG }}
-          generate_release_notes: true
+          body: |
+            ## 📦 LightOnOCR ${{ steps.version.outputs.TAG }}
+
+            **OCR văn bản tiếng Việt** từ PDF sử dụng ONNX Runtime (int4 quantized).
+
+            ### 📥 Cài đặt
+            1. Tải file `LightOnOCR_Setup_v${{ steps.version.outputs.VERSION }}.exe` bên dưới
+            2. Chạy installer và làm theo hướng dẫn
+            3. Mở LightOnOCR từ Start Menu hoặc Desktop
+
+            ### ⚙️ Yêu cầu hệ thống
+            - Windows 10/11 (64-bit)
+            - RAM: 4GB+ (khuyến nghị 8GB)
+            - Dung lượng: ~1GB (bao gồm model ONNX tải lần đầu)
           files: |
             dist/installer/LightOnOCR_Setup_v${{ steps.version.outputs.VERSION }}.exe
