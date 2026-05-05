@@ -68,3 +68,4 @@ File kết quả mặc định được hiển thị dưới dạng thô trên a
 - Lưu file Markdown `.md` với hộp thoại chọn nơi lưu hoặc Copy nhanh vào Clipboard.
 - Chế độ Dark Theme tối giản, chống mỏi mắt.
 - Tự động chạy cùng Windows (Toggle qua Registry).
+![alt text](image.png)

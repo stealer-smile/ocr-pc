@@ -1,0 +1,84 @@
+name: Build & Release
+
+on:
+  push:
+    branches: [master]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      # ── Checkout ──
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # ── Determine version from config.py ──
+      - name: Extract version
+        id: version
+        shell: pwsh
+        run: |
+          $ver = (Select-String -Path config.py -Pattern 'APP_VERSION\s*=\s*"(.+)"').Matches.Groups[1].Value
+          echo "VERSION=$ver" >> $env:GITHUB_OUTPUT
+          echo "TAG=v$ver" >> $env:GITHUB_OUTPUT
+          echo "Version: $ver"
+
+      # ── Check if tag already exists (skip if same version) ──
+      - name: Check existing tag
+        id: check_tag
+        shell: pwsh
+        run: |
+          $tag = "${{ steps.version.outputs.TAG }}"
+          $exists = git tag -l $tag
+          if ($exists) {
+            echo "TAG_EXISTS=true" >> $env:GITHUB_OUTPUT
+            echo "Tag $tag already exists, will skip release"
+          } else {
+            echo "TAG_EXISTS=false" >> $env:GITHUB_OUTPUT
+          }
+
+      # ── Setup Python ──
+      - name: Setup Python
+        if: steps.check_tag.outputs.TAG_EXISTS == 'false'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      # ── Install dependencies ──
+      - name: Install dependencies
+        if: steps.check_tag.outputs.TAG_EXISTS == 'false'
+        shell: pwsh
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      # ── Build with PyInstaller ──
+      - name: Build exe (PyInstaller)
+        if: steps.check_tag.outputs.TAG_EXISTS == 'false'
+        shell: pwsh
+        run: pyinstaller LightOnOCR.spec
+
+      # ── Build Installer (Inno Setup) ──
+      - name: Build installer (Inno Setup)
+        if: steps.check_tag.outputs.TAG_EXISTS == 'false'
+        shell: pwsh
+        run: |
+          # Inno Setup is pre-installed on windows-latest runners
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\setup.iss
+
+      # ── Create GitHub Release ──
+      - name: Create Release
+        if: steps.check_tag.outputs.TAG_EXISTS == 'false'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.TAG }}
+          name: LightOnOCR ${{ steps.version.outputs.TAG }}
+          generate_release_notes: true
+          files: |
+            dist/installer/LightOnOCR_Setup_v${{ steps.version.outputs.VERSION }}.exe
