@@ -11,6 +11,9 @@ from datetime import datetime
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
+import markdown
+from tkhtmlview import HTMLScrolledText
+
 # Thêm thư mục hiện tại vào sys.path (cho PyInstaller)
 if getattr(sys, "frozen", False):
   sys.path.insert(0, sys._MEIPASS)  # type: ignore
@@ -215,10 +218,10 @@ class App(tk.Tk):
     btn_row = tk.Frame(card, bg=BG_CARD)
     btn_row.pack(fill=tk.X, padx=16, pady=(0, 12))
 
-    self._make_btn(btn_row, "💾 Lưu .md", self._save_md, style="secondary").pack(side=tk.LEFT, expand=True, fill=tk.X,
+    self._make_btn(btn_row, "💾 Lưu .docx", self._save_docx, style="secondary").pack(side=tk.LEFT, expand=True, fill=tk.X,
                                                                                 padx=(0, 4))
     self._make_btn(btn_row, "📋 Copy", self._copy_text, style="secondary").pack(side=tk.LEFT, expand=True, fill=tk.X,
-                                                                               padx=(4, 0))
+                                                                                padx=(4, 0))
 
   def _build_progress(self, parent: tk.Frame) -> None:
     card = self._card(parent, "Tiến trình")
@@ -273,24 +276,17 @@ class App(tk.Tk):
     self.tab_frame = tk.Frame(parent, bg=BG_DARK)
     self.tab_frame.pack(fill=tk.X, pady=(0, 6))
 
-    # Text area
+    # HTML rendered area for Markdown display
     text_container = tk.Frame(parent, bg=BORDER, bd=1)
     text_container.pack(fill=tk.BOTH, expand=True)
 
-    self.text_area = tk.Text(
+    self.html_view = HTMLScrolledText(
       text_container,
-      bg=BG_PANEL, fg=TEXT_PRIMARY,
-      insertbackground=TEXT_PRIMARY,
-      selectbackground=ACCENT, selectforeground=TEXT_PRIMARY,
-      font=("Consolas", 11), wrap=tk.WORD,
-      relief=tk.FLAT, padx=16, pady=16,
-      state=tk.DISABLED,
+      background=BG_PANEL,
+      padx=16, pady=16,
     )
-    scrollbar = tk.Scrollbar(text_container, command=self.text_area.yview, bg=BG_DARK)
-    self.text_area.configure(yscrollcommand=scrollbar.set)
-
-    scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-    self.text_area.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+    self.html_view.pack(fill=tk.BOTH, expand=True)
+    self.html_view.set_html("<p style='color:#858585;font-family:Segoe UI;'>Kết quả sẽ hiển thị ở đây...</p>")
 
   def _build_statusbar(self) -> None:
     bar = tk.Frame(self, bg=BG_PANEL, height=28)
@@ -517,16 +513,24 @@ class App(tk.Tk):
       w.destroy()
 
   def _show_text(self, text: str) -> None:
-    self.text_area.configure(state=tk.NORMAL)
-    self.text_area.delete("1.0", tk.END)
-    self.text_area.insert(tk.END, text)
-    self.text_area.configure(state=tk.DISABLED)
+    html = self._md_to_html(text)
+    self.html_view.set_html(html)
     self._update_char_count()
 
+  def _md_to_html(self, md_text: str) -> str:
+    """Convert markdown to styled HTML for the viewer."""
+    body = markdown.markdown(
+      md_text,
+      extensions=["tables", "fenced_code", "nl2br"],
+    )
+    return (
+      f"<div style='color:{TEXT_PRIMARY};font-family:Segoe UI,sans-serif;"
+      f"font-size:13px;line-height:1.6;'>"
+      f"{body}</div>"
+    )
+
   def _clear_output(self) -> None:
-    self.text_area.configure(state=tk.NORMAL)
-    self.text_area.delete("1.0", tk.END)
-    self.text_area.configure(state=tk.DISABLED)
+    self.html_view.set_html("")
     self.char_count_label.configure(text="")
 
   def _update_char_count(self) -> None:
@@ -549,23 +553,28 @@ class App(tk.Tk):
     pages = [t for t in self.ocr_results if t]
     return "\n\n---\n\n".join(pages)
 
-  def _save_md(self) -> None:
+  def _save_docx(self) -> None:
     text = self._get_full_text()
     if not text:
       messagebox.showinfo("Thông báo", "Chưa có kết quả OCR!")
       return
 
-    default_name = (Path(self.pdf_path).stem if self.pdf_path else "output") + "_ocr.md"
+    default_name = (Path(self.pdf_path).stem if self.pdf_path else "output") + "_ocr.docx"
     out_dir = self.cfg.get("output_dir", str(Path.home() / "Documents"))
     path = filedialog.asksaveasfilename(
-      defaultextension=".md",
-      filetypes=[("Markdown", "*.md"), ("Text", "*.txt"), ("All", "*.*")],
+      defaultextension=".docx",
+      filetypes=[("Word Document", "*.docx"), ("All", "*.*")],
       initialdir=out_dir,
       initialfile=default_name,
     )
     if path:
-      Path(path).write_text(text, encoding="utf-8")
-      self._set_status(f"Đã lưu: {path}")
+      from docx_exporter import md_to_docx
+      try:
+        md_to_docx(text, path)
+        self._set_status(f"Đã lưu: {path}")
+      except Exception as e:
+        log.exception("DOCX save error")
+        messagebox.showerror("Lỗi", f"Không thể lưu DOCX:\n{e}")
 
   def _copy_text(self) -> None:
     text = self._get_full_text()
