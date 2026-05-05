@@ -4,6 +4,7 @@ build.spec — PyInstaller build configuration for LightOnOCR (ONNX)
 Build: pyinstaller build.spec
 """
 from PyInstaller.utils.hooks import collect_all, collect_data_files
+import os
 
 block_cipher = None
 
@@ -15,7 +16,7 @@ a = Analysis(
     pathex=["."],
     binaries=binaries_ort,
     datas=[
-        ("assets", "assets"),
+        *([("assets", "assets")] if os.path.isdir("assets") else []),
         *datas_ort,
         *collect_data_files("pypdfium2"),
         *collect_data_files("tkinterdnd2"),
